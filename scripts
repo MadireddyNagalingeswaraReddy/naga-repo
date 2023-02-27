@@ -1,0 +1,17 @@
+# update yum packages
+sudo yum update -y
+
+# install git
+sudo yum install git -y
+
+# install terrafrom
+sudo yum install -y yum-utils shadow-utils
+sudo yum-config-manager --add-repo https://rpm.releases.hashicorp.com/AmazonLinux/hashicorp.repo
+sudo yum -y install terraform
+
+# install docker
+sudo yum install docker -y
+sudo systemctl start docker
+sudo systemctl enable docker
+
+# This script is to run different tools #
