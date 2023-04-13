@@ -105,51 +105,55 @@ resource "aws_route_table_association" "MyLab_Assn" {
 resource "aws_instance" "Jenkins" {
   ami           = var.ami
   instance_type = var.instance_type
-  key_name = "nagapair"
-  vpc_security_group_ids = [aws_security_group.MyLab_Sec_Group.id]
-  subnet_id = aws_subnet.MyLab-Subnet1.id
+  key_name = var.key_name
+  vpc_security_group_ids = ["sg-04f4aff6296bd5706"]
+  subnet_id = var.subnet
   associate_public_ip_address = true
-  #user_data = file("./InstallJenkins.sh")
-  provisioner "file" {
-    source = "InstallJenkins.sh"
-    destination = "/tmp/InstallJenkins.sh"
-    connection {
-      type = "ssh"
-      user = "ec2-user"
-      host = "${aws_instance.Jenkins.public_ip}"
-      private_key = "${file("~/.ssh/id_rsa")}"
-    }
-  }
-  provisioner "remote-exec" {
-    inline = [
-      "chmod +x /tmp/InstallJenkins.sh",
-      "sudo /tmp/InstallJenkins.sh",
-    ]
-    connection {
-      type = "ssh"
-      user = "ec2-user"
-      host = "${aws_instance.Jenkins.public_ip}"
-      private_key = "${file("~/.ssh/id_rsa")}"
-    }
-  }
-
+  user_data = <<EOF
+  #!/bin/bash
+sudo yum update –y
+sudo wget -O /etc/yum.repos.d/jenkins.repo \https://pkg.jenkins.io/redhat-stable/jenkins.repo
+sudo rpm --import https://pkg.jenkins.io/redhat-stable/jenkins.io-2023.key
+sudo yum upgrade
+sudo amazon-linux-extras install java-openjdk11 -y
+sudo yum install jenkins -y
+sudo systemctl enable jenkins
+sudo systemctl start jenkins
+sudo systemctl status jenkins
+EOF
   tags = {
     Name = "Jenkins-Server"
   }
 }
 
-/*
+
 # Create an AWS EC2 Instance to host Ansible Controller (Control node)
 
 resource "aws_instance" "AnsibleController" {
   ami           = var.ami
   instance_type = var.instance_type
-  key_name = "nagapair"
-  vpc_security_group_ids = [aws_security_group.MyLab_Sec_Group.id]
-  subnet_id = aws_subnet.MyLab-Subnet1.id
+  key_name = var.key_name
+  vpc_security_group_ids = ["sg-04f4aff6296bd5706"]
+  subnet_id = var.subnet
   associate_public_ip_address = true
-  user_data = file("./InstallAnsibleCN.sh")
-
+  user_data = <<EOF
+  #!/bin/bash
+sudo yum update -y 
+sudo yum-config-manager --enable epel
+sudo yum install -y https://dl.fedoraproject.org/pub/epel/epel-release-latest-7.noarch.rpm
+sudo yum install epel-release-latest-7.noarch.rpm
+sudo amazon-linux-extras list 
+grep ansible2
+sudo yum install python python-devel python-pip openssl ansible -y
+sudo amazon-linux-extras enable ansible2 
+sudo yum update -y
+sudo yum install -y ansible
+sudo amazon-linux-extras install ansible2 -y
+sudo amazon-linux-extras install epel -y
+sudo yum-config-manager --enable epel
+sudo yum install python3 -y
+python3 --version -y 
+EOF
   tags = {
     Name = "Ansible-ControlNode"
   }
@@ -160,25 +164,38 @@ resource "aws_instance" "AnsibleController" {
 resource "aws_instance" "AnsibleManagedNode1" {
   ami           = var.ami
   instance_type = var.instance_type
-  key_name = "nagapair"
-  vpc_security_group_ids = [aws_security_group.MyLab_Sec_Group.id]
-  subnet_id = aws_subnet.MyLab-Subnet1.id
+  key_name = var.key_name
+  vpc_security_group_ids = ["sg-04f4aff6296bd5706"]
+  subnet_id = var.subnet
   associate_public_ip_address = true
-  user_data = file("./InstallAnsibleManagedNode.sh")
-
+  user_data = <<EOF
+  #! /bin/bash
+# add the user ansible admin
+useradd ansibleadmin
+# set password : the below command will avoid re entering the password
+echo "ansibleansible" | passwd --stdin ansibleadmin
+# modify the sudoers file at /etc/sudoers and add entry
+echo 'ansibleadmin     ALL=(ALL)      NOPASSWD: ALL' | sudo tee -a /etc/sudoers
+echo 'ec2-user     ALL=(ALL)      NOPASSWD: ALL' | sudo tee -a /etc/sudoers
+# this command is to add an entry to file : 
+echo 'PasswordAuthentication yes' | sudo tee -a /etc/ssh/sshd_config
+# the below sed command will find and replace words with spaces "PasswordAuthentication no" to "PasswordAuthentication yes"
+sed -i 's/PasswordAuthentication no/PasswordAuthentication yes/g' /etc/ssh/sshd_config
+service sshd restart
+EOF
   tags = {
     Name = "AnsibleMN-ApacheTomcat"
   }
 }
-
+/*
 # Create/Launch an AWS EC2 Instance(Ansible Managed Node2) to host DOCKERHOST
 
 resource "aws_instance" "AnsibleMN-DockerHost" {
   ami           = var.ami
   instance_type = var.instance_type
-  key_name = "nagapair"
-  vpc_security_group_ids = [aws_security_group.MyLab_Sec_Group.id]
-  subnet_id = aws_subnet.MyLab-Subnet1.id
+  key_name = var.key_name
+  vpc_security_group_ids = ["sg-04f4aff6296bd5706"]
+  subnet_id = var.subnet
   associate_public_ip_address = true
   user_data = file("./Docker.sh")
 
@@ -186,20 +203,44 @@ resource "aws_instance" "AnsibleMN-DockerHost" {
     Name = "AnsibleMN-DockerHost"
   }
 }
-
+*/
 # Create/Launch an AWS EC2 Instance to host Sonatype Nexus
 
 resource "aws_instance" "Nexus" {
   ami           = var.ami
   instance_type = var.instance_type_for_nexus
-  key_name = "nagapair"
-  vpc_security_group_ids = [aws_security_group.MyLab_Sec_Group.id]
-  subnet_id = aws_subnet.MyLab-Subnet1.id
+  key_name = var.key_name
+  vpc_security_group_ids = ["sg-04f4aff6296bd5706"]
+  subnet_id = var.subnet
   associate_public_ip_address = true
-  user_data = file("./InstallNexus.sh")
+  user_data = <<EOF
+  #! /bin/bash
+# Install Java
+sudo yum install java-1.8.0-openjdk.x86_64 -y
 
+
+sudo yum update -y
+cd /opt
+sudo wget https://download.sonatype.com/nexus/3/nexus-3.51.0-01-unix.tar.gz
+# Unzip/Untar the compressed file
+sudo tar xf latest-unix.tar.gz
+# Rename folder for ease of use
+sudo mv nexus-3.* nexus3
+# Enable permission for ec2-user to work on nexus3 and sonatype-work folders
+sudo chown -R ec2-user:ec2-user nexus3/ sonatype-work/
+# Create a file called nexus.rc and add run as ec2-user
+cd /opt/nexus3/bin/
+touch nexus.rc
+echo 'run_as_user="ec2-user"' | sudo tee -a /opt/nexus3/bin/nexus.rc
+# Add nexus as a service at boot time
+ln -s /opt/nexus3/bin/nexus /etc/init.d/nexus
+cd /etc/init.d
+chkconfig --add nexus
+chkconfig --levels 345 nexus on
+
+service nexus start
+EOF
   tags = {
     Name = "Nexus-Server"
   }
 }
-*/
